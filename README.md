@@ -1,216 +1,72 @@
-Hackathon Understanding each line of code - technical questions will be on the code
-why did you choose value (e.g high parameter )
-Minimum score 97.9% accuracy for classifications
+# Food-101 image classification
 
-Minimum score
-0.03 (For Regressions, r squared → KPI) 
-MSE (error)
+End-to-end **computer vision** experiment on the [Food-101](https://data.vision.ee.ethz.ch/cvl/datasets_extra/food-101/) dataset: exploratory analysis, stratified train/validation split, `tf.data` pipelines, and **transfer learning** with **EfficientNet-B0** (ImageNet weights) plus a small classification head.
 
-3 Domains:
-Machine Learning 
-Computer Vision 
-NLP 
+The main artifact is the Jupyter notebook [`food-classification-model.ipynb`](food-classification-model.ipynb). The notebook was developed on **Kaggle** (GPU); paths and outputs reflect that environment, with **local runs** supported via `FOOD101_IMAGES_DIR` or a standard folder layout (see below).
 
+## What this demonstrates
 
-[ Raw Images ]
-↓
-[ Data Strategy ] ← What you load, how you split, how you balance
-↓
-[ Preprocessing ] ← Resize, normalize, augment
-↓
-[ Architecture ] ← Pretrained CNN + custom classification head
-↓
-[ Training Strategy ] ← Learning rate, epochs, fine-tuning schedule
-↓
-[ Evaluation ] ← Accuracy, confusion matrix, per-class breakdown
+- Framing a multi-class problem (101 balanced classes, 1,000 images each)
+- Building file lists and label indices in pandas
+- Stratified splitting with scikit-learn
+- Efficient batched loading with TensorFlow
+- Transfer learning: frozen backbone, trainable head, optional callbacks for fine-tuning experiments
 
+## Quick start
 
-Layer 1: Data Strategy
+### 1. Environment
 
-You don't use all 289K images. You scope strategically:
+Use **Python 3.11 or 3.12**. TensorFlow does not publish wheels for very new interpreters (for example **3.14**); if `python3` is too new on your machine, create the venv with 3.11 explicitly:
 
-* Take the top 15–20 categories by image count (ensures balance)
-* Target ~3,000–5,000 images per class
-* Split 80% train / 10% validation / 10% test — always split before augmentation so your test set reflects real-world conditions
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-Why this matters: A balanced 15-class problem with 4K images per class is dramatically easier to hit 99% on than an imbalanced 50-class problem with wildly unequal samples.
+### 2. Data
 
-Layer 2: Preprocessing
+Download Food-101 and point the notebook at the directory that contains **one subfolder per class** (the `images` folder in the official layout).
 
-Every image needs to be transformed into a tensor a neural network can consume:
+**Option A — environment variable (any layout):**
 
-* Resize to 224×224 (standard input size for most pretrained CNNs)
-* Normalize pixel values using ImageNet's mean and std — this is non-negotiable when using pretrained weights, because the model was trained expecting that exact distribution
-* Augment training images only: random horizontal flips, small rotations, color jitter — this artificially multiplies your dataset and forces the model to generalize
+```bash
+export FOOD101_IMAGES_DIR="/absolute/path/to/food-101/images"
+```
 
-Layer 3: Architecture — Transfer Learning
+**Option B — convention (no env var):** put the `images` folder at either:
 
-This is the conceptual heart of why 99% is achievable fast:
+- `data/food-101/images`, or  
+- `food-101/images`  
 
+(relative to the repo root or your current working directory when you launch Jupyter).
 
-ImageNet Pretrained ResNet50 or EfficientNet-B3│├── Frozen early layers (detect edges, textures, basic shapes)│     These weights are already perfect — don't touch them│├── Partially unfrozen middle layers (detect patterns, parts)│     Fine-tune these gently with a low learning rate│└── Replaced final layer (was 1000 ImageNet classes)      → Your new layer: N fashion classes (e.g. 15)      → Train this from scratch with normal learning rate
+**Kaggle:** attach the Food-101 dataset; the notebook’s `find_food101_images_dir()` still searches under `/kaggle/input` when local paths are not found.
 
-PROBLEM: "Classify fashion images into N categories" DATASET CHOICE: DeepFashion → volume, label quality, diversity DATA STRATEGY: Scope to top 15 balanced classes (~60K images) MODEL CHOICE: EfficientNet-B3 pretrained on ImageNet WHY IT WORKS: Domain similarity → transfer learning is highly effective TRAINING: Phase 1 (head only) → Phase 2 (fine-tune backbone) EXPECTED RESULT: 98–99%+ on validation/test set TIME TO BUILD: ~90 minutes with clean pipeline
+### 3. Run
 
+```bash
+jupyter lab food-classification-model.ipynb
+```
 
+Run cells from the top. The notebook includes exploratory sections and multiple training experiments; later cells repeat setup for iterative runs on Kaggle.
 
+## Project layout
 
-7. Check image width and height
+| Path | Purpose |
+|------|--------|
+| `food-classification-model.ipynb` | EDA, data pipeline, EfficientNet-B0 model, training |
+| `requirements.txt` | Python dependencies |
+| `docs/hackathon-notes.md` | Original study / hackathon notes (preserved) |
 
-Number of images checked: 600
-Min width: 288 Max width: 512
-Min height: 260 Max height: 512
+## CI
 
-EDA SUMMARY:
+GitHub Actions installs dependencies and verifies imports (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
-“The Food-101 dataset contains 101 balanced classes with 1000 images each.
- Images are mostly uniform in size (~512x512) with minor variation, making preprocessing straightforward.
- The dataset is clean, well-structured, and suitable for training a classification model without major adjustments.”
+## Study notes
 
+Hackathon-style notes and interview prompts that lived in the root README are kept in [`docs/hackathon-notes.md`](docs/hackathon-notes.md).
 
-# -----------------------------------
-# 11. Quick summary
-# -----------------------------------
+## License
 
-print("Dataset summary")
-print("-" * 40)
-print("Images directory:", images_dir)
-print("Number of classes:", len(class_names))
-print("Total images:", class_df["image_count"].sum())
-print("Min images in a class:", class_df["image_count"].min())
-print("Max images in a class:", class_df["image_count"].max())
-print("Average images per class:", round(class_df["image_count"].mean(), 2))
-
-Dataset summary
-----------------------------------------
-Images directory: /kaggle/input/datasets/dansbecker/food-101/food-101/food-101/images
-Number of classes: 101
-Total images: 101000
-Min images in a class: 1000
-Max images in a class: 1000
-Average images per class: 1000.0
-
-The roadmap
-
-We’ll build it in this order:
-
-1.  Prepare labels and filepaths 
-
-What this does
-
-This creates a table like:
-
-*  one row = one image 
-* filepath = where the image lives 
-* label = the food category 
-
-You should get about:
-
-* 101000 rows
-* 2 columns
-
-
-2. Create train/validation split : Step 3: split the data into training and validation sets.
-
-Now we divide them into:
-
-* training set: the model learns from this 
-* validation set: the model is tested on this while training 
-
-A common split is:
-
-* 80% train
-* 20% validation
-
-Because your dataset is balanced, we also want each split to keep the same class proportions. That is what stratify does.
-
-
-What your output means
-
-Train shape: (80800, 3)
-Validation shape: (20200, 3)
-
-
-
-This means:
-
-* 80,800 images will be used to teach the model 
-* 20,200 images will be used to test how well it is learning during training 
-
-The 3 means your dataframe has 3 columns, likely:
-
-* filepath
-* label
-* label_idx
-
-We split the dataset so the model can learn on one part and be tested on unseen but similar data to check if it actually understands — not just memorizes.
-
-
-
-
-1.  Build TensorFlow datasets: 
-
-A TensorFlow dataset is a data pipeline that:
-
-*  reads each image from disk 
-*  resizes it 
-*  converts it into numbers 
-*  groups images into batches 
-*  feeds them efficiently to the model 
-
-So instead of the model seeing:
-
-“here’s a filename”
-
-it sees:
-
-“here’s a 224×224 image tensor and its label”
-
-
-
-A) Pipeline is working:
-
-Image batch shape: (32, 224, 224, 3)
-Label batch shape: (32,)
-
-🧠 Meaning:
-
-* 32 → batch size (you process 32 images at once) 
-* 224, 224 → every image has been resized correctly 
-* 3 → RGB channels (color images) 
-
-👉 Translation:
-
-“The model will receive batches of 32 color images, each sized 224×224”
-
-B) Images & Labels Match
-
-*  actual food images 🍽️ 
-*  correct labels like falafel, foie_gras, etc. 
-
-👉 This confirms:
-
-*  images loaded correctly ✅ 
-*  labels are aligned correctly ✅ 
-*  preprocessing worked ✅
-
-
-Step 5: Build the transfer learning model
-
-Uses a pretrained vision brain (EfficientNet)
- Keeps its knowledge frozen 
- Adds a new layer to classify your 101 foods 
-
-
-
-*  Load pretrained model 
-*  Add classification head 
-*  Train frozen model 
-*  Evaluate 
-*  Optionally fine-tune a little more 
-
-
-Questions:
-Why did you choose this model? already trained. CNN using transfer learning. 
-If we change one line of code, eg..... what would happen if you changed your epochs 
-how to make training your data faster
+See [LICENSE](LICENSE).
